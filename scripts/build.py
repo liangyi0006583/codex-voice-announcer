@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import plistlib
+import platform
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,7 @@ def build_app(destination):
     if sys.platform != 'darwin':
         raise RuntimeError('Building requires macOS and Xcode Command Line Tools.')
     compiler = subprocess.run(['xcrun', '--find', 'swiftc'], capture_output=True, text=True, check=True).stdout.strip()
+    sdk = subprocess.run(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], capture_output=True, text=True, check=True).stdout.strip()
     app = Path(destination)
     resources = app/'Contents/Resources'
     executable = app/'Contents/MacOS'
@@ -24,7 +26,8 @@ def build_app(destination):
     for source, output in [('Main.swift',executable/'CodexVoice'),
                            ('SpeechEngine.swift',resources/'SpeechEngine'),
                            ('AudioPlayer.swift',resources/'AudioPlayer')]:
-        subprocess.run([compiler, '-O', str(ROOT/'src'/source), '-o', str(output)], check=True)
+        subprocess.run([compiler, '-sdk', sdk, '-target', platform.machine()+'-apple-macosx13.0',
+                        '-O', str(ROOT/'src'/source), '-o', str(output)], check=True)
     for name in ['monitor.py','NeuralEngine.py']:
         shutil.copy2(ROOT/'src'/name,resources/name)
     shutil.copy2(ROOT/'docs/USAGE.md',resources/'使用说明.txt')
