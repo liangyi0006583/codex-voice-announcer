@@ -11,6 +11,8 @@ from build import ROOT
 
 MODEL_REPO='mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit'
 MODEL_REVISION='e7dd0585652209fa0d7783659aad4e8a324de11c'
+ASR_REPO='mlx-community/whisper-small-mlx'
+ASR_REVISION='45f3915923c7a79a5a5b5a7d909d39aeb0e5630e'
 
 
 def setup(data):
@@ -31,7 +33,14 @@ snapshot_download(repo_id=sys.argv[1],revision=sys.argv[2],local_dir=sys.argv[3]
     env=dict(os.environ,HF_HUB_DISABLE_TELEMETRY='1',HF_HUB_DISABLE_IMPLICIT_TOKEN='1')
     subprocess.run([str(python),'-c',download,MODEL_REPO,MODEL_REVISION,
                     str(data/'models/Qwen3-TTS-1.7B-Base-8bit')],env=env,check=True)
-    print('Optional model installed. Import your own reference audio next.')
+    asr_download="""import sys
+from huggingface_hub import snapshot_download
+snapshot_download(repo_id=sys.argv[1],revision=sys.argv[2],local_dir=sys.argv[3],token=False,
+                  allow_patterns=['config.json','weights.npz'])
+"""
+    subprocess.run([str(python),'-c',asr_download,ASR_REPO,ASR_REVISION,
+                    str(data/'models/whisper-small-mlx')],env=env,check=True)
+    print('TTS and local Chinese-verification models installed. Select a bundled voice or import your own.')
 
 
 if __name__=='__main__':

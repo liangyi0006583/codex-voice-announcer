@@ -9,7 +9,7 @@ import wave
 from pathlib import Path
 import numpy as np
 
-PLAYER = Path(os.environ.get('CODEX_VOICE_PLAYER', str(Path(__file__).resolve().parents[1] / '.build/Codex Voice Announcer.app/Contents/Resources/AudioPlayer')))
+PLAYER = Path(os.environ.get('CODEX_VOICE_PLAYER',str(Path(__file__).resolve().parents[1]/'.build/Codex Voice Announcer.app/Contents/Resources/AudioPlayer')))
 
 
 class AudioTests(unittest.TestCase):
@@ -53,7 +53,7 @@ class AudioTests(unittest.TestCase):
         firm, firm_pitch = self.render(style='firm')
         self.assertGreater(gentle, firm)
         self.assertGreater(gentle_pitch, firm_pitch + 20)
-    @unittest.skipUnless(os.environ.get("CODEX_VOICE_AUDIO_TESTS") == "1", "Live audio is opt-in")
+    @unittest.skipUnless(os.environ.get("CODEX_VOICE_AUDIO_TESTS")=="1", "Live audio is opt-in")
     def test_route_recovery_continues_from_existing_position(self):
         progress = self.root/'progress.json'
         start = time.monotonic()
@@ -68,7 +68,8 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(state['frame'], self.sr * 4)
         self.assertLess(elapsed, 5.3)  # Recovery must not restart the whole recording.
         self.assertGreater(elapsed, 3.8)
-    @unittest.skipUnless(os.environ.get("CODEX_VOICE_AUDIO_TESTS") == "1", "Live audio is opt-in")
+        self.assertLessEqual(state['effectsUpdates'], 2)
+    @unittest.skipUnless(os.environ.get("CODEX_VOICE_AUDIO_TESTS")=="1", "Live audio is opt-in")
     def test_settings_change_during_playback(self):
         settings = self.root/'settings.json'; progress = self.root/'progress.json'
         settings.write_text(json.dumps({'rate':190,'pitch_semitones':0,'speech_style':'formal'}))

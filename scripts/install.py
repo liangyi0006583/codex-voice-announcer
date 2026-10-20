@@ -38,8 +38,16 @@ def install(home, start=True, python=None):
             backup=destination.with_name(destination.name+'.previous-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
             destination.rename(backup)
         shutil.copytree(app,destination)
-        for name in ['monitor.py','NeuralEngine.py','SpeechEngine','AudioPlayer']:
+        for name in ['monitor.py','NeuralEngine.py','SpeechText.py','VerifySpeech.py','SpeechEngine','AudioPlayer']:
             shutil.copy2(app/'Contents/Resources'/name,runtime/name); (runtime/name).chmod(0o700)
+        for preset in (app/'Contents/Resources/voices').iterdir():
+            if not preset.is_dir(): continue
+            voice_directory=runtime/'reference'/preset.name
+            voice_directory.mkdir(parents=True,exist_ok=True); voice_directory.chmod(0o700)
+            for name in ['reference.wav','source.json']:
+                target=voice_directory/name
+                if not target.exists(): shutil.copy2(preset/name,target)
+                target.chmod(0o600)
     settings=runtime/'settings.json'
     if not settings.exists():
         settings.write_text(json.dumps({'paused':False,'announce_completed':True,'rate':190,

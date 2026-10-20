@@ -37,6 +37,8 @@ final class FilePlayer {
     var retries = 0
     var recovering = false
     var lastAdvance = Date()
+    var lastProgress = Date.distantPast
+    var effectsUpdates = 0
     var timer: Timer?
     var observer: NSObjectProtocol?
     var routeListener: AudioObjectPropertyListenerBlock?
@@ -62,7 +64,8 @@ final class FilePlayer {
         guard let path = plan.progressPath else { return }
         let value: [String: Any] = ["pid": getppid(), "playerPid": getpid(), "phase": phase,
             "updated": Date().timeIntervalSince1970, "rateMultiplier": pitch.rate,
-            "pitchCents": pitch.pitch, "frame": cursor, "routeRecoveries": retries]
+            "pitchCents": pitch.pitch, "frame": cursor, "routeRecoveries": retries,
+            "effectsUpdates": effectsUpdates]
         if let data = try? JSONSerialization.data(withJSONObject: value) {
             try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
             chmod(path, 0o600)
@@ -80,7 +83,9 @@ final class FilePlayer {
             style = settings["speech_style"] as? String ?? style
         }
         let value = effects(rate: rate, pitch: tone, style: style)
-        pitch.rate = value.0; pitch.pitch = value.1
+        // Repeatedly writing unchanged AU parameters can retrigger DSP smoothing.
+        if abs(pitch.rate - value.0) > 0.0001 { pitch.rate = value.0; effectsUpdates += 1 }
+        if abs(pitch.pitch - value.1) > 0.01 { pitch.pitch = value.1; effectsUpdates += 1 }
     }
 
     func captureCursor() {
@@ -143,7 +148,10 @@ final class FilePlayer {
             guard let self = self else { return }
             self.updateEffects(); self.captureCursor()
             if !self.recovering, Date().timeIntervalSince(self.lastAdvance) > 2 { self.recover() }
-            self.progress(self.recovering ? "switching_output" : "playing")
+            if Date().timeIntervalSince(self.lastProgress) >= 0.5 {
+                self.progress(self.recovering ? "switching_output" : "playing")
+                self.lastProgress = Date()
+            }
         }
         if CommandLine.arguments.contains("--simulate-route-change") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.recover() }

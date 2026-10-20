@@ -24,9 +24,10 @@ import subprocess
 import threading
 import time
 import uuid
+from SpeechText import readable_text
 
 HOME = Path.home()
-DATA = HOME / 'Library/Application Support/CodexVoiceAnnouncer'
+DATA = Path(os.environ.get('CODEX_VOICE_DATA_DIR', str(HOME / 'Library/Application Support/CodexVoiceAnnouncer')))
 CODEX = HOME / '.codex'
 DEFAULTS = {'paused': False, 'announce_completed': True, 'rate': 190,
             'voice': 'Tingting', 'speech_limit': 500, 'speech_style': 'formal',
@@ -81,7 +82,7 @@ def spoken_words(text):
     for token, phrase in replacements.items():
         text = re.sub(r'(?<![A-Za-z])' + re.escape(token) + r'(?![A-Za-z])', phrase, text, flags=re.I)
     text = re.sub(r'\b(\d+)\s+passed\b', r'\1 项测试通过', text)
-    return text
+    return readable_text(text)
 
 
 def speech_plan(title, kind, content, limit=500, style='formal'):
@@ -483,17 +484,55 @@ class Monitor:
                 if not all(Path(p).exists() for p in command):
                     raise RuntimeError('语音组件缺失，请重新安装播报程序')
                 payload = json.dumps(body, ensure_ascii=False).encode()
+                local_voice = str(cfg.get('voice_id', '')).startswith('local:')
                 self.speech_process = subprocess.Popen(command,
-                                                        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                _, err = self.speech_process.communicate(payload, timeout=360)
+                                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                try:
+                    output, err = self.speech_process.communicate(payload, timeout=900)
+                except subprocess.TimeoutExpired:
+                    self.speech_process.terminate()
+                    try:
+                        self.speech_process.communicate(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        self.speech_process.kill(); self.speech_process.communicate()
+                    output, err = b'', '角色语音准备超时'.encode()
                 if self.stop_requested.is_set():
                     self.mark_speech(entry, 'paused' if settings().get('paused') else 'stopped')
                     continue
+                verification = {}
+                if local_voice and self.speech_process.returncode == 0:
+                    try:
+                        speech_stats = json.loads(output)
+                        verification = speech_stats.get('validation') or {}
+                        entry['speech_metrics'] = {k: speech_stats[k] for k in
+                            ('generation_seconds', 'peak_memory_gb', 'batch_count', 'clone_mode') if k in speech_stats}
+                    except (ValueError, TypeError):
+                        pass
+                fallback = local_voice and (self.speech_process.returncode != 0 or not verification.get('passed'))
+                if verification:
+                    entry['speech_validation'] = verification
+                if fallback:
+                    progress = read_json(DATA / 'neural-progress.json', {})
+                    if progress.get('pid') == self.speech_process.pid and progress.get('phase') in ('playing', 'switching_output'):
+                        raise RuntimeError('播放中断，已停止。可手动重播；不会自动从头重复。')
+                    # Never read foreign/garbled output just because synthesis exited.
+                    # Preserve the reminder with deterministic native Mandarin instead.
+                    fallback_cfg = dict(cfg, voice_id='com.apple.voice.compact.zh-CN.Tingting')
+                    command, body = speech_job(fallback_cfg, entry)
+                    self.mark_speech(entry, 'speaking')
+                    self.speech_process = subprocess.Popen(command, stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    output, err = self.speech_process.communicate(json.dumps(body, ensure_ascii=False).encode(), timeout=300)
+                    if self.stop_requested.is_set():
+                        self.mark_speech(entry, 'paused' if settings().get('paused') else 'stopped')
+                        continue
+                    entry['speech_fallback'] = True
+                    logging.warning('角色语音未通过校验或合成失败，已使用系统中文语音')
                 if self.speech_process.returncode != 0:
                     detail = err.decode(errors='replace').strip().splitlines()
                     raise RuntimeError(detail[-1][-300:] if detail else '语音进程退出')
                 self.mark_speech(entry, 'spoken')
-                self.speech_failure = ''
+                self.speech_failure = '角色语音未通过校验，已改用系统中文播报。' if fallback else ''
             except Exception as exc:
                 if self.speech_process and self.speech_process.poll() is None:
                     self.speech_process.kill()
@@ -675,7 +714,7 @@ class Monitor:
             path.unlink(missing_ok=True)
             action = command.get('action')
             if action == 'test':
-                self.emit('test', '', '语音播报测试', str(uuid.uuid4()), '测试提醒', '当前使用清晰、正式的中文女声。\n我会先读出任务名称，再说明需要您处理的内容。\n例如：费用核对已经完成。请确认成本数据，再继续下一步。', force=True)
+                self.emit('test', '', '语音播报测试', str(uuid.uuid4()), '测试提醒', '这是当前音色的中文播报测试。\n我会先读出任务名称，再说明需要您处理的内容。\n例如：费用核对已经完成。请确认成本数据，再继续下一步。', force=True)
             elif action == 'replay':
                 with self.history_lock:
                     old = next((dict(e) for e in self.history if e['id'] == command.get('id')), None)

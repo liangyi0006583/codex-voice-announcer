@@ -28,13 +28,14 @@ def build_app(destination):
                            ('AudioPlayer.swift',resources/'AudioPlayer')]:
         subprocess.run([compiler, '-sdk', sdk, '-target', platform.machine()+'-apple-macosx13.0',
                         '-O', str(ROOT/'src'/source), '-o', str(output)], check=True)
-    for name in ['monitor.py','NeuralEngine.py']:
+    for name in ['monitor.py','NeuralEngine.py','SpeechText.py','VerifySpeech.py']:
         shutil.copy2(ROOT/'src'/name,resources/name)
+    shutil.copytree(ROOT/'voices',resources/'voices',dirs_exist_ok=True)
     shutil.copy2(ROOT/'docs/USAGE.md',resources/'使用说明.txt')
     metadata = {'CFBundleName':'Codex Voice Announcer','CFBundleDisplayName':'Codex 语音播报',
                 'CFBundleExecutable':'CodexVoice','CFBundleIdentifier':BUNDLE_ID,
-                'CFBundlePackageType':'APPL','CFBundleShortVersionString':'1.0.0',
-                'CFBundleVersion':'1','LSMinimumSystemVersion':'13.0','NSHighResolutionCapable':True}
+                'CFBundlePackageType':'APPL','CFBundleShortVersionString':'1.1.0',
+                'CFBundleVersion':'2','LSMinimumSystemVersion':'13.0','NSHighResolutionCapable':True}
     with (app/'Contents/Info.plist').open('wb') as f:
         plistlib.dump(metadata,f)
     return app

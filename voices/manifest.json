@@ -1,0 +1,52 @@
+{
+  "audio_files": [
+    {
+      "path": "voices/warden/reference.wav",
+      "kind": "reference",
+      "sha256": "0049d079a4edd10d97f388fe9532edf4f7f0f50ec79c81b678dcaa67882fd62c",
+      "sample_rate": 24000,
+      "channels": 1,
+      "duration_seconds": 6.5204
+    },
+    {
+      "path": "samples/warden-zh.wav",
+      "kind": "synthetic-demo",
+      "sha256": "42d411cd51cb386eaf744dae0eb7ce4c1830418257d98526134715de8e01ae01",
+      "sample_rate": 24000,
+      "channels": 1,
+      "duration_seconds": 7.6306
+    },
+    {
+      "path": "voices/red-queen/reference.wav",
+      "kind": "reference",
+      "sha256": "391aa6e388dccc38d82353acec6de59f29056365707bffb1009381a034d05fff",
+      "sample_rate": 24000,
+      "channels": 1,
+      "duration_seconds": 2.3841
+    },
+    {
+      "path": "samples/red-queen-zh.wav",
+      "kind": "synthetic-demo",
+      "sha256": "2b7e33832c5f4ec82e7e2886de45b0de9403f7e74957dabc434f6cd2b9f140de",
+      "sample_rate": 24000,
+      "channels": 1,
+      "duration_seconds": 10.6667
+    },
+    {
+      "path": "voices/aizen/reference.wav",
+      "kind": "reference",
+      "sha256": "5f15aa325b03fc2e4669cf587718d2cc3bbb9fcb2c1387249481ac12061a8aff",
+      "sample_rate": 24000,
+      "channels": 1,
+      "duration_seconds": 3.3915
+    },
+    {
+      "path": "samples/aizen-zh.wav",
+      "kind": "synthetic-demo",
+      "sha256": "be13a473beb927144018eb0740fff5382762fb55217a67a1d169506b6a58c747",
+      "sample_rate": 24000,
+      "channels": 1,
+      "duration_seconds": 7.09
+    }
+  ]
+}

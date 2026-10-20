@@ -51,7 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource, NSTab
     var toneSlider = NSSlider(value: 0, minValue: -3, maxValue: 3, target: nil, action: nil)
     var toneLabel = NSTextField(labelWithString: "音调：0 半音")
     let styles = ["formal", "gentle", "firm"]
-    let voiceIDs = ["local:custom-1", "local:custom-2", "com.apple.ttsbundle.gryphon-neural_Shufen_zh-TW_premium", "com.apple.voice.compact.zh-CN.Tingting"]
+    let voiceIDs = ["local:warden", "local:red-queen", "com.apple.ttsbundle.gryphon-neural_Shufen_zh-TW_premium", "com.apple.voice.compact.zh-CN.Tingting", "local:aizen", "local:custom-1", "local:custom-2", "local:custom-3"]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? FileManager.default.createDirectory(at: dataDir.appendingPathComponent("controls"), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -132,7 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource, NSTab
         root.addArrangedSubview(options)
         let voiceOptions = NSStackView(); voiceOptions.orientation = .horizontal; voiceOptions.spacing = 12
         voiceOptions.addArrangedSubview(NSTextField(labelWithString: "音色"))
-        voicePicker.addItems(withTitles: ["自定义参考音色一", "自定义参考音色二", "增强系统女声", "标准普通话女声（大陆）"])
+        voicePicker.addItems(withTitles: ["守望者（英文原声音色）", "红皇后（电影原声音色）", "增强系统女声", "标准普通话女声（大陆）", "蓝染（《BLEACH》日语参考音色）", "自定义参考音色一", "自定义参考音色二", "自定义参考音色三"])
         voicePicker.target = self; voicePicker.action = #selector(changeVoice)
         voiceOptions.addArrangedSubview(voicePicker)
         voiceOptions.addArrangedSubview(NSTextField(labelWithString: "语气"))
@@ -226,7 +226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource, NSTab
         let rate = config["rate"] as? Double ?? 190
         rateSlider.doubleValue = rate; rateLabel.stringValue = "语速：\(Int(rate))"
         let voiceId = config["voice_id"] as? String ?? voiceIDs[3]
-        voicePicker.selectItem(at: voiceIDs.firstIndex(of: voiceId) ?? 0)
+        voicePicker.selectItem(at: voiceIDs.firstIndex(of: voiceId) ?? 3)
         let characterVoice = voiceId.hasPrefix("local:")
         rateSlider.isEnabled = true
         if characterVoice { rateLabel.stringValue = String(format: "语速：%.2f 倍", rate / 190) }

@@ -1,10 +1,12 @@
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 import plistlib
 import sys
 import tempfile
 import unittest
+import wave
 from unittest.mock import patch
 
 SCRIPTS=Path(__file__).resolve().parents[1]/'scripts'
@@ -18,8 +20,11 @@ import check_publish
 class InstallTests(unittest.TestCase):
     def fake_build(self,target):
         resource=target/'Contents/Resources'; resource.mkdir(parents=True)
-        for name in ['monitor.py','NeuralEngine.py','SpeechEngine','AudioPlayer']:
+        for name in ['monitor.py','NeuralEngine.py','SpeechText.py','VerifySpeech.py','SpeechEngine','AudioPlayer']:
             (resource/name).write_text('synthetic test file')
+        voice=resource/'voices/warden';voice.mkdir(parents=True)
+        (voice/'reference.wav').write_bytes(b'synthetic fixture')
+        (voice/'source.json').write_text('{}')
         return target
     def test_staged_install_uses_supplied_home_preserves_settings_and_never_launches(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -55,6 +60,22 @@ class InstallTests(unittest.TestCase):
         self.assertIn('api-token',check_publish.scan_blob('test.txt',('sk-'+'x'*32).encode()))
         self.assertIn('private-or-generated-file',check_publish.scan_blob('reference/sample.wav',b'RIFF'))
         self.assertEqual(check_publish.scan_blob('README.md',b'Public source and synthetic tests'),[])
+    def test_published_audio_matches_explicit_manifest_and_is_tag_free(self):
+        root=SCRIPTS.parent
+        entries=json.loads((root/'voices/manifest.json').read_text())['audio_files']
+        self.assertEqual({entry['path'] for entry in entries},check_publish.PUBLIC_AUDIO)
+        for entry in entries:
+            data=(root/entry['path']).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(),entry['sha256'])
+            self.assertEqual(check_publish.scan_blob(entry['path'],data),[])
+    def test_reinstall_preserves_user_reference_audio(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder)
+            with patch.object(install,'build_app',side_effect=self.fake_build): install.install(home,start=False)
+            reference=home/'Library/Application Support/CodexVoiceAnnouncer/reference/warden/reference.wav'
+            reference.write_bytes(b'user-owned local replacement')
+            with patch.object(install,'build_app',side_effect=self.fake_build): install.install(home,start=False)
+            self.assertEqual(reference.read_bytes(),b'user-owned local replacement')
 
 
 if __name__=='__main__': unittest.main()

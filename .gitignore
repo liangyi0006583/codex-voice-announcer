@@ -1,4 +1,4 @@
-# Only source, documentation and synthetic tests belong in this repository.
+# Source, documentation, synthetic tests and explicitly allowlisted audio only.
 .DS_Store
 __pycache__/
 *.py[cod]
@@ -16,6 +16,8 @@ neural-venv/
 *.sqlite*
 *.db
 *.wav
+!voices/*/reference.wav
+!samples/*-zh.wav
 *.mp3
 *.m4a
 *.zip
@@ -33,3 +35,6 @@ seen.json
 auth.json
 *progress.json
 service.lock
+diagnostics/
+Codex语音播报说明.txt
+停止Codex语音播报.command

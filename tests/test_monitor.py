@@ -1,13 +1,16 @@
 import importlib.util
+import sys
 import unittest
 import json
 import queue
 import sqlite3
 import tempfile
 import threading
+from unittest.mock import patch
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location('monitor', Path(__file__).resolve().parents[1] / 'src/monitor.py')
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
+spec = importlib.util.spec_from_file_location('monitor', Path(__file__).resolve().parents[1]/'src/monitor.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
@@ -81,9 +84,9 @@ class DetectorTests(unittest.TestCase):
         self.assertIn('亚马逊仓储配送', spoken)
     def test_role_voice_uses_local_engine_and_continuous_text(self):
         entry = {'title': '费用核对', 'kind': '等待你确认', 'content': '请确认成本数据。'}
-        args, payload = m.speech_job({'voice_id': 'local:custom-1'}, entry, Path('/private/test'))
+        args, payload = m.speech_job({'voice_id': 'local:warden'}, entry, Path('/private/test'))
         self.assertEqual(args, ['/private/test/neural-venv/bin/python', '/private/test/NeuralEngine.py'])
-        self.assertEqual(payload['voiceId'], 'local:custom-1')
+        self.assertEqual(payload['voiceId'], 'local:warden')
         self.assertEqual(payload['language'], 'Chinese')
         self.assertIn('请确认成本数据', payload['text'])
         self.assertNotIn('segments', payload)
@@ -91,13 +94,73 @@ class DetectorTests(unittest.TestCase):
         args, payload = m.speech_job({'voice_id': 'com.apple.voice.compact.zh-CN.Tingting'}, {'title':'测试','kind':'测试提醒','content':'请查看任务。'}, Path('/private/test'))
         self.assertEqual(args, ['/private/test/SpeechEngine'])
         self.assertTrue(payload['segments'])
+    def test_long_technical_details_are_not_spelled_as_speech(self):
+        from SpeechText import readable_text, speech_batches
+        text = '请查看 ads/guard.py。SHA-256：' + 'a1' * 32 + '。28/28 通过。'
+        spoken = readable_text(text)
+        self.assertNotIn('ads/guard.py', spoken)
+        self.assertNotIn('a1' * 32, spoken)
+        self.assertIn('28 项，共 28 项', spoken)
+        self.assertTrue(all(len(b) <= 72 for b in speech_batches('这是较长的中文测试。' * 30)))
+    def test_failed_voice_validation_falls_back_to_native_mandarin(self):
+        old_data = m.DATA
+        with tempfile.TemporaryDirectory() as folder:
+            m.DATA = Path(folder)
+            entry = {'id':'test','title':'测试','kind':'需要回答','content':'请确认下一步。'}
+            monitor = m.Monitor.__new__(m.Monitor)
+            monitor.running = True; monitor.history = [entry]; monitor.history_lock = threading.Lock()
+            monitor.speeches = queue.PriorityQueue(); monitor.speeches.put((0, 1, entry))
+            monitor.stop_requested = threading.Event(); monitor.speech_process = None
+            monitor.speech_failure = ''; calls = []
+            class Process:
+                def __init__(self, command, **kwargs):
+                    calls.append(command); self.returncode = 4 if len(calls) == 1 else 0; self.pid = 1234
+                def communicate(self, payload, **kwargs):
+                    if len(calls) == 2: monitor.running = False
+                    return b'', b'validation rejected'
+            def job(cfg, entry):
+                return ([str(Path(folder)/('neural' if cfg['voice_id'].startswith('local:') else 'native'))], {'text':'测试'})
+            for n in ['neural','native']: (Path(folder)/n).touch()
+            try:
+                with patch.object(m,'settings',return_value={'voice_id':'local:warden','paused':False}), patch.object(m,'speech_job',side_effect=job), patch.object(m.subprocess,'Popen',Process):
+                    monitor.speak_worker()
+                self.assertEqual(len(calls),2)
+                self.assertTrue(entry['speech_fallback'])
+                self.assertEqual(entry['speech_status'],'spoken')
+                self.assertIn('系统中文',monitor.speech_failure)
+            finally: m.DATA = old_data
     def test_character_rate_tone_and_style_reach_player(self):
-        cfg = {'voice_id': 'local:custom-1', 'rate': 260, 'pitch_semitones': -2, 'speech_style': 'firm'}
+        cfg = {'voice_id': 'local:warden', 'rate': 260, 'pitch_semitones': -2, 'speech_style': 'firm'}
         _, payload = m.speech_job(cfg, {'title':'测试','kind':'测试提醒','content':'请查看任务。'}, Path('/private/test'))
         self.assertEqual(payload['rate'], 260)
         self.assertEqual(payload['pitchSemitones'], -2)
         self.assertEqual(payload['style'], 'firm')
         self.assertEqual(payload['settingsPath'], '/private/test/settings.json')
+    def test_playback_failure_is_not_restarted_from_beginning(self):
+        old_data = m.DATA
+        with tempfile.TemporaryDirectory() as folder:
+            m.DATA = Path(folder)
+            (m.DATA/'neural-progress.json').write_text(json.dumps({'pid':1234,'phase':'playing'}))
+            component = m.DATA/'engine'; component.touch()
+            entry = {'id':'test','title':'测试','kind':'需要回答','content':'请确认下一步。'}
+            monitor = m.Monitor.__new__(m.Monitor)
+            monitor.running = True; monitor.history = [entry]; monitor.history_lock = threading.Lock()
+            monitor.speeches = queue.PriorityQueue(); monitor.speeches.put((0,1,entry))
+            monitor.stop_requested = threading.Event(); monitor.speech_process = None; monitor.speech_failure = ''
+            calls = []
+            class Process:
+                returncode = 2; pid = 1234
+                def __init__(self,command,**kwargs): calls.append(command)
+                def poll(self): return self.returncode
+                def communicate(self,*args,**kwargs):
+                    monitor.running=False; return b'',b'playback interrupted'
+            try:
+                with patch.object(m,'settings',return_value={'voice_id':'local:warden','paused':False}), patch.object(m,'speech_job',return_value=([str(component)],{})), patch.object(m.subprocess,'Popen',Process):
+                    monitor.speak_worker()
+                self.assertEqual(len(calls),1)
+                self.assertEqual(entry['speech_status'],'failed')
+                self.assertIn('不会自动从头重复',entry['speech_error'])
+            finally: m.DATA=old_data
     def test_native_style_changes_real_acoustics(self):
         entry = {'title':'测试','kind':'测试提醒','content':'请查看任务。'}
         _, formal = m.speech_job({'voice_id':'system','speech_style':'formal'}, entry)
